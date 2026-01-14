@@ -171,7 +171,8 @@ class Attention(nn.Module):
         q, k, v = qkv.unbind(0)
         q, k = self.q_norm(q), self.k_norm(k)
 
-        if self.fused_attn:
+        fused_ok = self.fused_attn and hasattr(F, "scaled_dot_product_attention")
+        if fused_ok:
             x = F.scaled_dot_product_attention(
                 q,
                 k,
@@ -388,7 +389,7 @@ class VisionTransformer(nn.Module):
         self.norm_pre = norm_layer(embed_dim) if pre_norm else nn.Identity()
 
         dpr = [
-            x.item() for x in torch.linspace(0, drop_path_rate, depth)
+            x.item() for x in torch.linspace(0, drop_path_rate, depth, dtype=torch.float32)
         ]  # stochastic depth decay rule
         self.blocks = nn.Sequential(
             *[

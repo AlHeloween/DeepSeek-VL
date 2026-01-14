@@ -12,7 +12,6 @@ urls = {homepage = "https://github.com/deepseek-ai/DeepSeek-VL"}
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "torch>=2.0.1",
     "transformers>=4.38.2",
     "timm>=0.9.16",
     "accelerate",
@@ -31,23 +30,21 @@ gradio = [
     "tqdm==4.64.0",
     "colorama==0.4.5",
     "Pygments==2.12.0",
-    "markdown==3.4.1",
-    "SentencePiece==0.1.96"
-]
-lint = [
-    "isort",
-    "black[jupyter] >= 22.6.0",
-    "pylint[spelling] >= 2.15.0",
-    "flake8",
-    "flake8-bugbear",
-    "flake8-comprehensions",
-    "flake8-docstrings",
-    "flake8-pyi",
-    "flake8-simplify",
-    "ruff",
-    "pyenchant",
-    "pre-commit",
+    "markdown==3.4.1"
 ]
 
 [tool.setuptools]
 packages = {find = {exclude = ["images"]}}
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

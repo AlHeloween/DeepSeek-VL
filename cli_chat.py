@@ -213,7 +213,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model_path",
         type=str,
-        default="deepseek-ai/deepseek-vl-7b-chat",
+        default="deepseek-ai/deepseek-vl-1.3b-chat",
         help="the huggingface model name or the local path of the downloaded huggingface model.",
     )
     parser.add_argument("--temperature", type=float, default=0.2)

@@ -17,6 +17,8 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+from pathlib import Path
+
 import torch
 from transformers import AutoModelForCausalLM
 
@@ -24,21 +26,45 @@ from deepseek_vl.models import MultiModalityCausalLM, VLChatProcessor
 from deepseek_vl.utils.io import load_pil_images
 
 # specify the path to the model
-model_path = "deepseek-ai/deepseek-vl-7b-chat"
+model_path = "deepseek-ai/deepseek-vl-1.3b-base"
 vl_chat_processor: VLChatProcessor = VLChatProcessor.from_pretrained(model_path)
 tokenizer = vl_chat_processor.tokenizer
 
+_CUDA_AVAILABLE = torch.cuda.is_available()
+_VRAM_BYTES = torch.cuda.get_device_properties(0).total_memory if _CUDA_AVAILABLE else 0
+_SMALL_VRAM = _CUDA_AVAILABLE and _VRAM_BYTES < (8 * 1024 * 1024 * 1024)
+
+# On small GPUs (e.g. 4GB), `device_map="auto"` will often offload to CPU RAM.
+# This is slow but keeps the script usable without hard-forcing CPU-only mode.
+_DEVICE_MAP = "auto" if _CUDA_AVAILABLE else None
+
+# Pascal (and older) do not support bf16; prefer fp16 on CUDA, fp32 on CPU.
+_DTYPE = torch.float16 if _CUDA_AVAILABLE else torch.float32
 vl_gpt: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(
-    model_path, trust_remote_code=True
+    model_path,
+    trust_remote_code=True,
+    device_map=_DEVICE_MAP,
+    torch_dtype=_DTYPE,
 )
-vl_gpt = vl_gpt.to(torch.bfloat16).cuda().eval()
+vl_gpt = vl_gpt.eval()
+
+print(
+    "DeepSeek-VL load:",
+    f"cuda_available={_CUDA_AVAILABLE}",
+    f"vram_gb={(_VRAM_BYTES / (1024**3)):.2f}" if _CUDA_AVAILABLE else "vram_gb=n/a",
+    f"device_map={_DEVICE_MAP!r}",
+    f"dtype={_DTYPE}",
+)
+if hasattr(vl_gpt, "hf_device_map"):
+    print("hf_device_map:", getattr(vl_gpt, "hf_device_map"))
 
 # single image conversation example
+_HERE = Path(__file__).resolve().parent
 conversation = [
     {
         "role": "User",
-        "content": "<image_placeholder>Describe each stage of this image.",
-        "images": ["./images/training_pipelines.jpg"],
+        "content": "<image_placeholder>Describe each stage of this image.",     
+        "images": [str(_HERE / "images" / "training_pipelines.jpg")],
     },
     {"role": "Assistant", "content": ""},
 ]
@@ -52,10 +78,10 @@ conversation = [
 #                    "<image_placeholder>a dog wearing a wizard outfit, and "
 #                    "<image_placeholder>what's the dog wearing?",
 #         "images": [
-#             "images/dog_a.png",
-#             "images/dog_b.png",
-#             "images/dog_c.png",
-#             "images/dog_d.png",
+#             str(_HERE / "images" / "dog_a.png"),
+#             str(_HERE / "images" / "dog_b.png"),
+#             str(_HERE / "images" / "dog_c.png"),
+#             str(_HERE / "images" / "dog_d.png"),
 #         ],
 #     },
 #     {"role": "Assistant", "content": ""}
@@ -65,7 +91,7 @@ conversation = [
 pil_images = load_pil_images(conversation)
 prepare_inputs = vl_chat_processor(
     conversations=conversation, images=pil_images, force_batchify=True
-).to(vl_gpt.device)
+).to(vl_gpt.device, dtype=_DTYPE if _CUDA_AVAILABLE else torch.float32)
 
 # run image encoder to get the image embeddings
 inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
